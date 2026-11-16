@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ApplicationPackage
+  SchemaVersion="1.0"
+  AppVersion="1.0.0"
+  Author="mcp-civil3d-2027"
+  ProductCode="{6C1F2B8E-3D4A-4E59-9B7C-1A2D3E4F5A61}"
+  UpgradeCode="{9E8D7C6B-5A49-4382-A1B0-C9D8E7F6A5B4}"
+  Name="Civil3dMcp"
+  Description="Servidor MCP (Claude) para o Civil 3D 2027 em http://127.0.0.1:5101/mcp">
+  <CompanyDetails Name="mcp-civil3d-2027" Url="https://github.com/rafaelcruzmartins/mcp-civil3d-2027" />
+  <RuntimeRequirements Platform="Civil3D" SeriesMin="R26.0" SeriesMax="R26.0" OS="Win64" />
+  <Components>
+    <ComponentEntry AppName="Civil3dMcp" ModuleName="./Contents/Civil3dMcp.Loader.dll"
+                    LoadOnAutoCADStartup="True" LoadOnRequest="False" AppDescription="Servidor MCP para o Claude">
+      <Commands GroupName="CIVIL3DMCP">
+        <Command Global="C3DMCP" Local="C3DMCP" />
+        <Command Global="C3DMCPRESTART" Local="C3DMCPRESTART" />
+      </Commands>
+    </ComponentEntry>
+  </Components>
+</ApplicationPackage>

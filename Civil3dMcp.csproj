@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <OutputType>Library</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RootNamespace>Civil3dMcp</RootNamespace>
+    <AssemblyName>Civil3dMcp</AssemblyName>
+    <Version>1.0.0</Version>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <WarningsAsErrors>nullable;CA1416</WarningsAsErrors>
+    <AcadDir Condition="'$(AcadDir)' == ''">C:\Program Files\Autodesk\AutoCAD 2027</AcadDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Remove="System.Drawing" />
+    <Using Remove="System.Windows.Forms" />
+    <Using Include="System.IO" />
+    <Compile Remove="Loader/**;tests/**" />
+    <None Remove="Loader/**;tests/**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- O runtimeconfig do AutoCAD 2027 já declara Microsoft.AspNetCore.App: Kestrel está disponível no processo. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Referências do host: nunca copiadas, o acad.exe já as carrega. -->
+    <Reference Include="acdbmgd"><HintPath>$(AcadDir)\acdbmgd.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="acmgd"><HintPath>$(AcadDir)\acmgd.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="accoremgd"><HintPath>$(AcadDir)\accoremgd.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="AecBaseMgd"><HintPath>$(AcadDir)\ACA\AecBaseMgd.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="AeccDbMgd"><HintPath>$(AcadDir)\C3D\AeccDbMgd.dll</HintPath><Private>false</Private></Reference>
+    <!-- Roslyn 4.10 que vem com o AutoCAD (evita conflito de versão). -->
+    <Reference Include="Microsoft.CodeAnalysis"><HintPath>$(AcadDir)\Microsoft.CodeAnalysis.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Microsoft.CodeAnalysis.CSharp"><HintPath>$(AcadDir)\Microsoft.CodeAnalysis.CSharp.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+</Project>
