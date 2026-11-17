@@ -4,17 +4,30 @@
 #   powershell -ExecutionPolicy Bypass -File .\install.ps1 -ConfigPath "C:\...\claude_desktop_config.json"
 #   powershell -ExecutionPolicy Bypass -File .\install.ps1 -AllUsers      # todos os usuarios do Windows (admin)
 #   powershell -ExecutionPolicy Bypass -File .\install.ps1 -SkipConfig    # so o plugin, sem mexer no Claude Desktop
+#   powershell -ExecutionPolicy Bypass -File .\install.ps1 -ConfigOnly    # so a configuracao do Claude (Claude Desktop FECHADO)
 param(
     [string]$ConfigPath,
     [switch]$AllUsers,
     [switch]$SkipConfig,
+    [switch]$ConfigOnly,
     [int]$Port = 5101
 )
 $ErrorActionPreference = 'Stop'
 
 function Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 
+# Diretorios do uv fora do %APPDATA%. No Claude Desktop da Microsoft Store (MSIX) o %APPDATA% do app e virtualizado
+# e o link de versao do Python gerenciado pelo uv fica quebrado ("Missing expected target directory for Python
+# minor version link"). Usar ~/.local/share/uv evita isso e funciona igual na instalacao classica.
+$uvShare = (Join-Path $env:USERPROFILE '.local\share\uv') -replace '\\', '/'
+$uvEnv = [ordered]@{
+    UV_PYTHON_INSTALL_DIR = "$uvShare/python"
+    UV_CACHE_DIR          = "$uvShare/cache"
+    UV_LINK_MODE          = 'copy'
+}
+
 # 1. Pre-requisitos
+if (-not $ConfigOnly) {
 $c3d = 'C:\Program Files\Autodesk\AutoCAD 2027\C3D\AeccDbMgd.dll'
 if (-not (Test-Path $c3d)) { Write-Warning "Civil 3D 2027 nao encontrado em $c3d. O plugin so carrega no Civil 3D 2027." }
 if (Get-Process acad -ErrorAction SilentlyContinue) { throw 'Feche o Civil 3D (acad.exe) antes de instalar.' }
@@ -37,8 +50,29 @@ if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
 Copy-Item $src $dest -Recurse -Force
 Get-ChildItem $dest -Recurse | Unblock-File   # arquivos vindos de zip/download
 if ($Port -ne 5101) { [Environment]::SetEnvironmentVariable('CIVIL3D_MCP_PORT', "$Port", 'User') }
+}
 
 if ($SkipConfig) { Step 'Plugin instalado (configuracao do Claude Desktop ignorada).'; return }
+
+# Claude Code: aceita HTTP direto, sem ponte. So registra se o CLI 'claude' estiver no PATH.
+$claudeCli = (Get-Command claude -ErrorAction SilentlyContinue).Source
+if ($claudeCli) {
+    Step 'Registrando o servidor civil3d no Claude Code (escopo user)'
+    $ErrorActionPreference = 'Continue'
+    & $claudeCli mcp remove civil3d --scope user 2>$null | Out-Null
+    & $claudeCli mcp add --transport http --scope user civil3d "http://127.0.0.1:$Port/mcp" 2>$null | Out-Null
+    $ErrorActionPreference = 'Stop'
+} else {
+    Write-Host "  Claude Code: CLI 'claude' nao encontrado; veja a secao Claude Code do Civil3D.md para registrar a mao."
+}
+
+# O Claude Desktop guarda a configuracao em memoria e a regrava ao sair: editar com ele aberto se perde.
+if (Get-Process -Name 'Claude' -ErrorAction SilentlyContinue) {
+    Write-Warning 'O Claude Desktop esta aberto: ele regrava claude_desktop_config.json ao sair e apagaria a alteracao.'
+    Write-Host '  Saia do Claude Desktop pela bandeja do sistema (Sair) e rode:'
+    Write-Host '    powershell -ExecutionPolicy Bypass -File .\install.ps1 -ConfigOnly'
+    return
+}
 
 # 3. uv / uvx (ponte stdio -> HTTP para o Claude Desktop)
 $uvx = (Get-Command uvx -ErrorAction SilentlyContinue).Source
@@ -50,6 +84,7 @@ Step "uvx: $uvx"
 Step 'Baixando a ponte mcp-proxy para o cache (primeira vez demora um pouco)'
 # No PowerShell 5.1 o stderr do uvx (mensagens de download) viraria erro fatal com 'Stop'.
 $ErrorActionPreference = 'Continue'
+foreach ($k in $uvEnv.Keys) { Set-Item "env:$k" $uvEnv[$k] }   # mesmo cache que o Claude Desktop vai usar
 & $uvx --with 'mcp<2' mcp-proxy --help 2>$null | Out-Null
 $code = $LASTEXITCODE
 $ErrorActionPreference = 'Stop'
@@ -86,6 +121,7 @@ if (-not $cfg.PSObject.Properties['mcpServers']) {
 $entry = [pscustomobject]@{
     command = $uvx
     args    = @('--with', 'mcp<2', 'mcp-proxy', '--transport', 'streamablehttp', "http://127.0.0.1:$Port/mcp")
+    env     = [pscustomobject]$uvEnv
 }
 if ($cfg.mcpServers.PSObject.Properties['civil3d']) { $cfg.mcpServers.civil3d = $entry }
 else { $cfg.mcpServers | Add-Member -NotePropertyName civil3d -NotePropertyValue $entry }

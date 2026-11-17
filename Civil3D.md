@@ -45,32 +45,55 @@ Claude Desktop ──stdio──> uvx mcp-proxy ──HTTP──> 127.0.0.1:5101
    ```
    O script:
    1. copia `Civil3dMcp.bundle` para `%APPDATA%\Autodesk\ApplicationPlugins\` (e desbloqueia os arquivos do zip);
-   2. localiza o `uvx` e baixa a ponte `mcp-proxy` para o cache;
-   3. localiza o `claude_desktop_config.json`, faz backup (`.bak-AAAAMMDD-HHMMSS`) e adiciona o servidor `civil3d`.
+   2. registra o servidor no Claude Code, se o CLI `claude` estiver no PATH;
+   3. localiza o `uvx` e baixa a ponte `mcp-proxy` para o cache;
+   4. localiza o `claude_desktop_config.json`, faz backup (`.bak-AAAAMMDD-HHMMSS`) e adiciona o servidor `civil3d`.
+      **Se o Claude Desktop estiver aberto, o script não mexe na configuração** (o app a regravaria ao sair) e
+      pede para sair pela bandeja e rodar `install.ps1 -ConfigOnly`.
 
    Opções:
    - `-ConfigPath <arquivo>`: use se o script achar zero ou mais de um arquivo de configuração.
    - `-AllUsers`: instala o plugin em `C:\ProgramData\...`, para todos os usuários do Windows. Precisa de admin.
    - `-SkipConfig`: instala só o plugin.
+   - `-ConfigOnly`: só a configuração do Claude (não exige o Civil 3D fechado; exige o Claude Desktop fechado).
    - `-Port <n>`: troca a porta.
+
+   > **Rodando pelo Claude Code dentro do Claude Desktop?** O próprio Claude Desktop estará aberto, então rode o
+   > script normalmente e, no fim, peça ao usuário para sair do Claude pela bandeja e rodar `install.ps1 -ConfigOnly`
+   > num PowerShell comum (menu Iniciar). Clone/descompacte o repositório **fora do `%APPDATA%`/`%LOCALAPPDATA%`**
+   > (por exemplo em `%USERPROFILE%\mcp-civil3d-2027`): no Claude Desktop da Microsoft Store (MSIX), pastas novas
+   > criadas pelo app dentro de `AppData` vão para `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\...` e um PowerShell
+   > comum não as encontra.
 4. **Reinicie o Claude Desktop.** Não basta fechar a janela: saia pelo ícone da bandeja (*Sair*) e abra de novo.
 5. Siga a *Verificação*.
 
 ### B. Manual (sem script)
 
 1. **Plugin:** copie a pasta `Civil3dMcp.bundle` inteira para `%APPDATA%\Autodesk\ApplicationPlugins\`, com o Civil 3D fechado. Se ela veio de um zip baixado, desbloqueie os arquivos: botão direito > Propriedades > Desbloquear, ou `Get-ChildItem -Recurse | Unblock-File`.
-2. **Configuração do Claude Desktop:** abra *Configurações > Desenvolvedor > Editar configuração*. Isso abre o arquivo certo; veja abaixo onde ele pode estar. Dentro de `"mcpServers"`, acrescente a entrada abaixo, trocando `SEU_USUARIO`:
+2. **Configuração do Claude Desktop:** **saia do Claude Desktop pela bandeja** e edite o arquivo com ele fechado
+   (o app guarda a configuração em memória e a regrava ao sair; uma edição feita com ele aberto some no próximo
+   reinício). Veja abaixo onde o arquivo pode estar. Dentro de `"mcpServers"`, acrescente a entrada abaixo, trocando `SEU_USUARIO`:
    ```json
    "civil3d": {
      "command": "C:\\Users\\SEU_USUARIO\\.local\\bin\\uvx.exe",
-     "args": ["--with", "mcp<2", "mcp-proxy", "--transport", "streamablehttp", "http://127.0.0.1:5101/mcp"]
+     "args": ["--with", "mcp<2", "mcp-proxy", "--transport", "streamablehttp", "http://127.0.0.1:5101/mcp"],
+     "env": {
+       "UV_PYTHON_INSTALL_DIR": "C:/Users/SEU_USUARIO/.local/share/uv/python",
+       "UV_CACHE_DIR": "C:/Users/SEU_USUARIO/.local/share/uv/cache",
+       "UV_LINK_MODE": "copy"
+     }
    }
    ```
    - Use o **caminho completo** do `uvx.exe`; para descobrir, rode `(Get-Command uvx).Source`. O Claude Desktop não expande `%USERPROFILE%` nem herda o PATH do terminal.
    - Barras invertidas são **duplas** no JSON. Mantenha as vírgulas entre servidores.
    - `mcp<2` é **obrigatório**: o `mcp-proxy` atual quebra com `mcp` 2.x.
-3. Rode uma vez `uvx --with "mcp<2" mcp-proxy --help`. Isso enche o cache; sem ele, a primeira inicialização pode estourar o tempo limite do Claude Desktop.
-4. Reinicie o Claude Desktop pela bandeja.
+   - O bloco `env` tira o Python e o cache do uv de dentro do `%APPDATA%`. É **necessário no Claude Desktop da Microsoft Store (MSIX)**, onde o `%APPDATA%` do app é virtualizado e o `uvx` falha com `Missing expected target directory for Python minor version link`. Na instalação clássica não atrapalha.
+3. Rode uma vez, com as mesmas variáveis, para encher o cache (sem isso, a primeira inicialização pode estourar o tempo limite do Claude Desktop):
+   ```powershell
+   $env:UV_PYTHON_INSTALL_DIR="$env:USERPROFILE\.local\share\uv\python"; $env:UV_CACHE_DIR="$env:USERPROFILE\.local\share\uv\cache"; $env:UV_LINK_MODE="copy"
+   uvx --with "mcp<2" mcp-proxy --help
+   ```
+4. Abra o Claude Desktop de novo.
 
 **Onde fica o `claude_desktop_config.json`**, conforme o tipo de instalação do Claude Desktop:
 
@@ -80,7 +103,8 @@ Claude Desktop ──stdio──> uvx mcp-proxy ──HTTP──> 127.0.0.1:5101
 | Microsoft Store / MSIX | `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude\claude_desktop_config.json` |
 | Instalador clássico | `%APPDATA%\Claude\claude_desktop_config.json` |
 
-Na dúvida, use *Editar configuração* no próprio app.
+Na dúvida, use *Configurações > Desenvolvedor > Editar configuração* no próprio app para descobrir o caminho, mas
+salve a alteração com o app fechado.
 
 ### C. Compilar do código-fonte
 
@@ -104,6 +128,17 @@ O Claude Code aceita HTTP direto, sem ponte:
 ```powershell
 claude mcp add --transport http --scope user civil3d http://127.0.0.1:5101/mcp
 ```
+
+Se o CLI `claude` não estiver no PATH (por exemplo, usando só o Code dentro do Claude Desktop), acrescente a entrada
+à mão em `"mcpServers"` no `%USERPROFILE%\.claude.json` (faça backup antes e mexa só nessa chave):
+
+```json
+"civil3d": { "type": "http", "url": "http://127.0.0.1:5101/mcp" }
+```
+
+As ferramentas aparecem nas sessões **novas** do Claude Code; uma sessão já aberta não recarrega a lista. O registro
+no Claude Code e no Claude Desktop são independentes: a lista em *Configurações > Desenvolvedor* mostra só o
+`claude_desktop_config.json`.
 
 ## Verificação
 
@@ -139,6 +174,10 @@ claude mcp add --transport http --scope user civil3d http://127.0.0.1:5101/mcp
 | Sintoma | Causa / solução |
 |---|---|
 | O conector `civil3d` não aparece no Claude Desktop | O app não foi reiniciado pela bandeja, o JSON está inválido (falta vírgula, barra simples) ou o caminho do `uvx.exe` está errado. Veja os logs em *Configurações > Desenvolvedor*. |
+| A entrada `civil3d` some do `claude_desktop_config.json` depois de reiniciar | A configuração foi editada com o Claude Desktop aberto; ao sair, ele regrava a versão que tinha em memória. Saia pela bandeja e rode `install.ps1 -ConfigOnly` (ou edite à mão) com o app fechado. |
+| `uvx` falha com `Missing expected target directory for Python minor version link` | Claude Desktop da Microsoft Store (MSIX): o `%APPDATA%\uv\python` visto pelo app é virtualizado. Use o bloco `env` com `UV_PYTHON_INSTALL_DIR`/`UV_CACHE_DIR` em `~/.local/share/uv` (o `install.ps1` já faz isso). |
+| Arquivo criado pelo Claude "não existe" no PowerShell comum | Claude Desktop MSIX: pastas novas criadas pelo app dentro de `AppData` ficam em `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\...`. Trabalhe fora do `AppData` (ex.: `%USERPROFILE%\mcp-civil3d-2027`). |
+| Não há zip em *Releases* | Use a opção C (compilar). Instale o .NET 10 SDK com `winget install --id Microsoft.DotNet.SDK.10`. |
 | Erro "cannot connect" / conexão recusada | O Civil 3D não está aberto, ou o plugin não carregou: rode `C3DMCP`. Se o servidor estiver parado, use `C3DMCPRESTART` e veja o log. |
 | `C3DMCP` é "comando desconhecido" | O bundle não está em `ApplicationPlugins`, os arquivos estão bloqueados (veio de zip: use `Unblock-File`) ou não é o Civil 3D **2027**. Confira com `APPLOAD` > *Startup Suite* / `NETLOAD` manual do `Civil3dMcp.Loader.dll`. |
 | Log com `TypeLoadException ... ModelContextProtocol.Core 0.4.0.0` | Alguém removeu o Loader ou carregou o `Civil3dMcp.dll` direto. O módulo do bundle tem que ser o `Civil3dMcp.Loader.dll` (veja *Armadilhas*). |
@@ -203,5 +242,5 @@ public static Task<CallToolResult> MinhaTool([Description("Nome do alinhamento."
 ## Desinstalar
 
 1. Feche o Civil 3D e apague `%APPDATA%\Autodesk\ApplicationPlugins\Civil3dMcp.bundle` (ou o de `C:\ProgramData\...`).
-2. Remova a entrada `"civil3d"` do `claude_desktop_config.json` (há backups `.bak-*` ao lado) e reinicie o Claude Desktop.
+2. Com o Claude Desktop fechado, remova a entrada `"civil3d"` do `claude_desktop_config.json` (há backups `.bak-*` ao lado) e abra o app de novo. No Claude Code: `claude mcp remove civil3d --scope user` (ou apague a chave no `%USERPROFILE%\.claude.json`).
 3. Opcional: apague `%APPDATA%\Civil3dMcp` (logs) e a variável `CIVIL3D_MCP_PORT`.
